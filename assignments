@@ -1,0 +1,127 @@
+
+
+---------------------ReplicaSet assignment------------------
+
+1. difference between  kubia-replicaset.yaml & kubia-rc.yaml are.
+
+	i. kubia-rc.yaml is kind:ReplicationController & kubia-replicaset.yaml is kind:ReplicaSet.
+	ii. kubia-replicaset.yaml has match lebels.
+	iv. kubia-replicaset.yaml doesnt have container port.
+	v. kubia-replicaset.yaml has apiversion as apps/V1 where as kubia-rc.yaml has only V1.
+	
+2. creating pod from kubia-replicaset.yaml by tis command, "kubectl apply -f  kubia-replicaset.yaml "
+
+	[root@ip-172-31-28-120 k8s-specifications]# kubectl get po
+	NAME                      READY   STATUS    RESTARTS   AGE
+	kubia-74fbf               1/1     Running   0          8m7s
+	kubia-ddbzt               1/1     Running   0          8m7s
+	kubia-mfcj4               1/1     Running   0          8m7s
+
+3. a service is created to above pods .
+
+	[root@ip-172-31-28-120 05-services]# kubectl apply -f kubia-svc.yaml
+
+	[root@ip-172-31-28-120 05-services]# kubectl get svc	
+	NAME         TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+	kubernetes   ClusterIP   10.96.0.1        <none>        443/TCP          5h17m
+	kubia2       ClusterIP   10.99.10.99      <none>        80/TCP           35s
+
+4. checked & found service "kubia2" hit abobe 3 pods.
+
+	[root@ip-172-31-28-120 05-services]# curl 10.99.10.99:80
+	You've hit kubia-mfcj4
+	[root@ip-172-31-28-120 05-services]# curl 10.99.10.99:80
+	You've hit kubia-ddbzt
+	[root@ip-172-31-28-120 05-services]# curl 10.99.10.99:80
+You've hit kubia-74fbf
+
+5. negative testing: change lebels name "app : kuba" in ReplicaSet.yaml. no connection made afterwards. as service is checking the pods with their same lebels(selector)
+
+	[root@ip-172-31-28-120 05-services]# curl 10.99.10.99:80
+	curl: (7) Failed to connect to 10.99.10.99 port 80 after 0 ms: Connection refused
+	
+	
+	
+-----------------------CronJobs Assignments-----------------------------
+
+
+1. open "cronjob.yaml" change apiversion to "apiVersion: batch/v1beta1"
+2. run the cronjob.
+
+	[root@ip-172-31-28-120 04-controllers]# kubectl apply -f cronjob.yaml
+	
+3. we get to know about the running jobs by following command.
+
+	[root@ip-172-31-28-120 04-controllers]# kubectl get jobs
+	NAME                                         COMPLETIONS   DURATION   AGE
+	batch-job-every-fifteen-minutes-1656773100   1/1           2m6s       23m
+	batch-job-every-fifteen-minutes-1656774000   1/1           2m4s       8m47s
+	
+	root@ip-172-31-28-120 04-controllers]# kubectl get cronjob
+	NAME                              SCHEDULE             SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+	batch-job-every-fifteen-minutes   0,15,30,45 * * * *   False     0        2m56s           6m45s
+	[root@ip-172-31-28-120 04-controllers]#
+	
+
+4. to permenantly delete/arrest cronjob we need to run below command. here only one cronjob running so put --all. instead of this we can specify 
+	specific cronjobs name as well
+
+	[root@ip-172-31-28-120 04-controllers]# kubectl delete cronjobs --all
+	
+5. CronJobs has scheduling features that means it will run the jobs in specific time interval. thats how cronjob differs from normal Jobs.
+
+
+
+
+-------------Voting APP assignment------------------
+
+
+
+1. deplyment done by below commands for all deployment .yaml also svc.yaml. for working "voting";"redis";"worker";"db" & "result" pod
+
+		[root@ip-172-31-28-120 k8s-specifications]# kubectl apply -f .
+
+2. voting & result pods have nodeport.
+
+		service/result       NodePort    10.104.243.241   <none>        5001:31001/TCP   8s
+		service/vote         NodePort    10.105.244.52    <none>        5000:31000/TCP   8s
+
+3. voting & result page opening by http://54.251.170.210:31000/ & http://54.251.170.210:31001/ respectively.
+
+4. result showing proper whenever voting done.
+
+5. voting pod deleted ; no changes happen. another pod get created.
+
+
+		vote-94849dc97-pfzxr      0/1     Terminating         0          98m
+		vote-94849dc97-q5rhj      0/1     ContainerCreating   0          13s
+
+6. deleting the worker POD; but no changes done. another pod get created.
+
+		worker-dd46d7584-2z7f4    1/1     Terminating         0          113m
+		worker-dd46d7584-wqh6v    0/1     ContainerCreating   0          7s
+
+
+7. deleted db-pod & result page didnot show the result properly. result page got stuck.
+
+		[root@ip-172-31-28-120 ~]# kubectl delete po db-b54cd94f4-rt2p2
+		pod "db-b54cd94f4-rt2p2" deleted
+		^C
+		[root@ip-172-31-28-120 ~]# kubectl get po
+		NAME                      READY   STATUS              RESTARTS   AGE
+		db-b54cd94f4-jqvhc        0/1     ContainerCreating   0          5s
+		db-b54cd94f4-rt2p2        1/1     Terminating         0          6h31m
+		
+
+
+8. all the deployment & service setup is in synchronus connection. so socket connection is expecting old db only' where as old has gone already.but as 
+	result pod is still not restarted; it will asking for old db only. so result is not showing properly
+
+
+8. after that "result-pod" deleted & then it works as it is again. result page is working fine whenever voting done. because then result pod get restart &
+	it will sync up with the current db.
+
+
+		result-5d57b59f4b-scr4s   1/1     Terminating   0          6h44m
+		result-5d57b59f4b-tsg4p   1/1     Running       0          3s
+
